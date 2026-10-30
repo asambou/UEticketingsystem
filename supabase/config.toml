@@ -1,0 +1,4 @@
+[functions.energy-members]
+# The handler verifies the user through Supabase Auth and then checks current
+# active admin membership. Legacy-only gateway validation excludes modern JWTs.
+verify_jwt = false

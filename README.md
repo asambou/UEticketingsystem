@@ -1,6 +1,6 @@
-# Unique Group Service Desk
+# Unique Energy Service Desk
 
-A lightweight service desk tailored to Unique Group's energy-service operations. The web interface runs on GitHub Pages; Supabase provides staff authentication and a shared PostgreSQL database. No server secrets are shipped to the browser.
+A lightweight service desk tailored to Unique Energy's energy-service operations. The web interface runs on GitHub Pages; Supabase provides staff authentication and a shared PostgreSQL database. No server secrets are shipped to the browser.
 
 ## Features
 
@@ -12,11 +12,11 @@ A lightweight service desk tailored to Unique Group's energy-service operations.
 - Material usage against 37 catalogue items, staff workload, category reports, CSV and full JSON exports.
 - Responsive layout and a clearly separate browser-only demo at `demo.html`.
 
-The supplied CSV is a set of master lists, not historical ticket records. It supplies 10 statuses, 16 service categories, 5 teams, 10 activity types, 11 demo staff names and 37 material items. Staff emails and phone numbers from the original file are deliberately excluded. All demo customer records are fictional.
+The supplied CSV is a set of master lists, not historical ticket records. It supplies 10 statuses, 16 service categories, 5 teams, 10 activity types, 11 private staff-directory entries and 37 material items. Staff emails and phone numbers from the original file stay in protected database tables. The public demo uses fictional staff names and customer records.
 
 ## First deployment
 
-1. Run `database/schema.sql` **once**, then apply `database/migrations/002_legacy_continuity.sql` in your Supabase project's SQL Editor. For an existing installation, apply only unapplied migrations. It creates two tables and the guarded save-ticket function in one transaction. For an existing installation, write an incremental migration rather than rerunning this initializer.
+1. Run `database/schema.sql` **once**, then apply `database/migrations/002_legacy_continuity.sql` and `database/migrations/003_energy_access.sql` in your Supabase project's SQL Editor. For an existing installation, apply only unapplied migrations. It creates two tables and the guarded save-ticket function in one transaction. For an existing installation, write an incremental migration rather than rerunning this initializer.
 2. Set the Project URL and **publishable** key in `config.js`. Never use a secret or `service_role` key.
 3. In GitHub repository **Settings → Pages**, choose **GitHub Actions**. Push to `main` to run `.github/workflows/pages.yml`. Only the six website files are included in the published artifact.
 4. In Supabase **Authentication → URL Configuration**, set the Site URL to the final Pages URL, including its repository path and trailing slash. Add that exact URL to allowed redirect URLs. Invite/password-reset emails return here.
@@ -29,7 +29,7 @@ insert into public.profiles (id, name, role)
 values ('AUTH-USER-UUID-HERE', 'Staff Name', 'admin');
 ```
 
-Use `manager`, `dispatcher`, or `technician` for subsequent users. Role administration happens in Supabase; there is no self-service role elevation. Do not grant admin based solely on an email address embedded in a request.
+Use `manager`, `dispatcher`, or `technician` for subsequent users. After bootstrap, use the administrator-only Team access screen for invitations, role changes and deactivation; there is no self-service role elevation. Do not grant admin based solely on an email address embedded in a request.
 
 ## Permissions
 
@@ -61,7 +61,7 @@ The interface consists of portable HTML/CSS/JavaScript and can be hosted on ngin
 
 ## Current boundaries
 
-No attachments, automated email/WhatsApp notifications, inventory balances, scheduled SLA escalations, real-time subscriptions or in-app user administration are included. Selecting WhatsApp records a communication event; it does not send a message. Material quantities are usage records, not stock deductions. The material catalogue and operational dropdowns are versioned in `lists.js`. Font files are loaded from Google Fonts, with local sans-serif fallbacks.
+No attachments, automated customer email/WhatsApp notifications, inventory balances, scheduled SLA escalations or real-time subscriptions are included. Administrator-only membership management and staff invitation emails are included. Selecting WhatsApp records a communication event; it does not send a message. Material quantities are usage records, not stock deductions. The material catalogue and operational dropdowns are versioned in `lists.js`. Font files are loaded from Google Fonts, with local sans-serif fallbacks.
 
 The JSON/data API is designed for an initial small team; the current UI loads the visible company queue at sign-in. Add server-side pagination and date-bounded reporting before the queue grows large. Sessions live in the current tab's session storage and tokens are refreshed when needed. Use normal sign-out on shared devices.
 
@@ -75,3 +75,18 @@ A missing or invalid original creation date stays null; it is not replaced with 
 An imported historical assignee stays attached even before that person has an account. Managers can continue editing the record without silently losing this assignment. Reassignments still require active staff, and an imported name does not grant authentication or broader access. Add an invited staff account with the matching unique display name to enable that technician's access. The team workload view includes historical assignees explicitly labelled as awaiting an account.
 
 Private import SQL and customer extracts must never be committed to this public repository. Migration inserts should use deterministic identity, duplicate-number protection, a transaction and a post-import reconciliation. Existing live tickets must never be overwritten by a workbook re-import. `database/verify_legacy.sql` exercises continuity cases with rollback-only fictional fixtures. Legacy source metadata remains outside the writeable payload of `save_ticket`.
+
+
+## Energy access and workbook work areas
+
+The approved `profiles` table is the Energy membership allowlist. An Auth account, a matching email domain, or an active entry in the old workbook directory does not grant access on its own. Public signup, anonymous login and social providers are disabled in the selected project. Only an approved active administrator can invite accounts and approve membership. Deactivation is checked by the database on every request; the open interface also checks membership on focus and every minute.
+
+Deploy `supabase/functions/energy-members/index.ts` as the `energy-members` Edge Function using the accompanying configuration. The handler validates the caller through Supabase Auth and checks their active admin profile before using the server-only invitation credential. The membership approval RPC runs with the caller's identity, so a revoked administrator cannot approve membership while an invitation is being sent. Never copy function environment secrets into `config.js` or browser code. The legacy-only gateway JWT switch is off because the handler performs authoritative user validation and supports current JWT signing keys. Its unauthenticated and invalid-token responses have been checked.
+
+**Team access** invites a named colleague, sets one of four roles, lists approved accounts and changes active status. You cannot remove your own administrator access or leave the app without an active admin. Approval and role/status changes are logged in `energy_access_audit`, readable only by administrators. Use the same exact display name as the original assignee when adding a technician who should continue historical work, or reassign those tickets to the new profile through a manager.
+
+**Tech** records activity type, completion, explicit start/end times, vehicle, action and notes on an assigned ticket. **Manager** records customer contact, channel, follow-up, satisfaction, escalation, next action and status/manager notes. These append to the ticket history. **Ticket report** joins current ticket fields with original service-request/invoice/source fields and all activity/material history; use the browser print dialog to print or save PDF. **Lists** shows the protected original directory, all dropdown sets, the material catalogue link and automatic ticket selection. The old spreadsheet submit buttons and derived report formulas are represented by web forms and live views, not copied Office scripts.
+
+`staff_directory` and `reference_lists` were populated from private source extracts. Those extracts and real invitation recipients must not be committed to this public repository. The database source directory has 11 people and 37 catalogue items; the public demo deliberately uses a smaller fictional roster. Listing a person is distinct from approving an account.
+
+Run `database/verify_energy_access.sql` alongside the existing permission/legacy tests to verify outsider denial, self-approval/promotion denial, administrator-only management and deactivation. All fixtures roll back. Email delivery still depends on the configured Supabase mail provider; check the recipient's inbox and use your organisation's SMTP configuration for wider rollout.

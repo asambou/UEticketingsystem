@@ -1,4 +1,4 @@
--- Unique Group Service Desk · run once in the Supabase SQL Editor.
+-- Unique Energy Service Desk · run once in the Supabase SQL Editor.
 -- No real customer data or email directory is seeded.
 begin;
 create table public.profiles (

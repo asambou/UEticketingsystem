@@ -89,48 +89,24 @@ window.UE_LISTS = {
   ],
   "staff": [
     {
-      "name": "Alieu Bah",
-      "role": "Manager"
+      "name": "Demo Dispatcher",
+      "role": "Dispatcher"
     },
     {
-      "name": "Amina Yatim",
-      "role": "Sales/Admin"
-    },
-    {
-      "name": "Madina Savage",
-      "role": "Sales/Admin"
-    },
-    {
-      "name": "Sheikh Omar Badgie",
-      "role": "Operations"
-    },
-    {
-      "name": "Ousman Njie",
+      "name": "Demo Technician A",
       "role": "Technician"
     },
     {
-      "name": "Abdourahman Njie",
+      "name": "Demo Technician B",
       "role": "Technician"
     },
     {
-      "name": "Jerreh Kujabie",
+      "name": "Demo Technician C",
       "role": "Technician"
     },
     {
-      "name": "Bubacarr Saho",
+      "name": "Demo Technician D",
       "role": "Technician"
-    },
-    {
-      "name": "Sarjo Samateh",
-      "role": "Business Development"
-    },
-    {
-      "name": "Sheriffo Dampha",
-      "role": "Manager"
-    },
-    {
-      "name": "Operations Director",
-      "role": "Director"
     }
   ],
   "materials": [
@@ -282,5 +258,9 @@ window.UE_LISTS = {
       "name": "Lug / Terminal",
       "unit": "Piece"
     }
+  ],
+  "yesNo": [
+    "Yes",
+    "No"
   ]
 };

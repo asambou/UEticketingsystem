@@ -1,0 +1,45 @@
+begin;
+create table public.reference_lists(key text primary key, items jsonb not null check(jsonb_typeof(items)='array'));
+create table public.staff_directory(email text primary key,name text not null,source_role text not null,source_active boolean not null,whatsapp text not null default '',notes text not null default '');
+create table public.energy_access_audit(id bigint generated always as identity primary key,at timestamptz not null default now(),actor uuid,subject uuid,action text not null,detail jsonb not null);
+alter table public.reference_lists enable row level security;
+alter table public.staff_directory enable row level security;
+alter table public.energy_access_audit enable row level security;
+create function public.is_energy_admin() returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.profiles where id=auth.uid() and active and role='admin');$$;
+revoke all on function public.is_energy_admin() from public;
+grant execute on function public.is_energy_admin() to authenticated;
+revoke all on public.reference_lists,public.staff_directory,public.energy_access_audit from anon,authenticated;
+grant select on public.reference_lists,public.staff_directory,public.energy_access_audit to authenticated;
+create policy approved_energy_lists on public.reference_lists for select to authenticated using(public.is_active_staff());
+create policy approved_energy_directory on public.staff_directory for select to authenticated using(public.is_active_staff());
+create policy admin_access_audit on public.energy_access_audit for select to authenticated using(public.is_energy_admin());
+create function public.list_energy_members() returns table(id uuid,name text,email text,role text,active boolean,last_sign_in_at timestamptz) language plpgsql security definer set search_path='' as $$begin
+ if not public.is_energy_admin() then raise exception 'Energy administrator access required' using errcode='42501'; end if;
+ return query select p.id,p.name,u.email::text,p.role,p.active,u.last_sign_in_at from public.profiles p join auth.users u on u.id=p.id order by p.name;
+end;$$;
+create function public.admin_approve_member(p_email text,p_name text,p_role text) returns uuid language plpgsql security definer set search_path='' as $$declare target uuid; existing public.profiles; begin
+ perform pg_advisory_xact_lock(91827364);
+ if not public.is_energy_admin() then raise exception 'Energy administrator access required' using errcode='42501'; end if;
+ if p_email is null or p_email!~'^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' or length(p_email)>254 or p_name is null or length(trim(p_name)) not between 1 and 120 or p_role is null or p_role not in('admin','manager','dispatcher','technician') then raise exception 'Valid email, name and role required'; end if;
+ select u.id into target from auth.users u where lower(u.email)=lower(trim(p_email));
+ if target is null then raise exception 'Invite this staff account first'; end if;
+ select * into existing from public.profiles where id=target;
+ if existing.id is not null then raise exception 'This member already has a profile; use their access controls'; end if;
+ insert into public.profiles(id,name,role,active) values(target,trim(p_name),p_role,true);
+ insert into public.energy_access_audit(actor,subject,action,detail) values(auth.uid(),target,'member_approved',jsonb_build_object('email',lower(trim(p_email)),'name',trim(p_name),'role',p_role));
+ return target;
+end;$$;
+create function public.admin_update_member(p_id uuid,p_role text,p_active boolean) returns void language plpgsql security definer set search_path='' as $$declare old_profile public.profiles; begin
+ perform pg_advisory_xact_lock(91827364);
+ if not public.is_energy_admin() then raise exception 'Energy administrator access required' using errcode='42501'; end if;
+ if p_role is null or p_role not in('admin','manager','dispatcher','technician') or p_active is null then raise exception 'Valid role and active status required'; end if;
+ select * into old_profile from public.profiles where id=p_id for update;
+ if old_profile.id is null then raise exception 'Member not found'; end if;
+ if p_id=auth.uid() and (not p_active or p_role<>'admin') then raise exception 'You cannot remove your own administrator access'; end if;
+ if old_profile.active and old_profile.role='admin' and (not p_active or p_role<>'admin') and (select count(*) from public.profiles where active and role='admin')<=1 then raise exception 'At least one active administrator is required'; end if;
+ update public.profiles set role=p_role,active=p_active where id=p_id;
+ insert into public.energy_access_audit(actor,subject,action,detail) values(auth.uid(),p_id,'member_changed',jsonb_build_object('before',to_jsonb(old_profile),'role',p_role,'active',p_active));
+end;$$;
+revoke all on function public.list_energy_members(),public.admin_approve_member(text,text,text),public.admin_update_member(uuid,text,boolean) from public;
+grant execute on function public.list_energy_members(),public.admin_approve_member(text,text,text),public.admin_update_member(uuid,text,boolean) to authenticated;
+commit;
