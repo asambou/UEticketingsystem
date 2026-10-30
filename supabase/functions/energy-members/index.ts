@@ -23,7 +23,7 @@ Deno.serve(async(req:Request)=>{
   const {email,name,role}=body;
   if(typeof email!=='string'||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||typeof name!=='string'||!name.trim()||name.length>120||!['admin','manager','dispatcher','technician'].includes(role))return reply(400,{message:'A valid staff email, name and role are required'});
   const cleanEmail=email.trim().toLowerCase();
-  const invite=await fetch(url+'/auth/v1/invite?redirect_to='+encodeURIComponent(origin+'/UEticketingsystem/'),{method:'POST',headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':'application/json'},body:JSON.stringify({email:cleanEmail,data:{name:name.trim()}})});
+  const invite=await fetch(url+'/auth/v1/invite?redirect_to='+encodeURIComponent(origin+'/UEticketingsystem/'),{method:'POST',headers:{apikey:serviceKey,...(serviceKey.startsWith('sb_secret_')?{}:{Authorization:'Bearer '+serviceKey}),'Content-Type':'application/json'},body:JSON.stringify({email:cleanEmail,data:{name:name.trim()}})});
   const sent=await invite.json().catch(()=>({}));
   const exists=['email_exists','user_already_exists'].includes(sent.error_code)||/already (been registered|registered|exists)/i.test(sent.msg||sent.message||'');
   if(!invite.ok&&!exists)return reply(400,{message:sent.msg||sent.message||'Invitation could not be sent. Check project email delivery settings.'});
