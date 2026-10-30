@@ -16,7 +16,7 @@ The supplied CSV is a set of master lists, not historical ticket records. It sup
 
 ## First deployment
 
-1. Run `database/schema.sql` **once** in your Supabase project's SQL Editor. It creates two tables and the guarded save-ticket function in one transaction. For an existing installation, write an incremental migration rather than rerunning this initializer.
+1. Run `database/schema.sql` **once**, then apply `database/migrations/002_legacy_continuity.sql` in your Supabase project's SQL Editor. For an existing installation, apply only unapplied migrations. It creates two tables and the guarded save-ticket function in one transaction. For an existing installation, write an incremental migration rather than rerunning this initializer.
 2. Set the Project URL and **publishable** key in `config.js`. Never use a secret or `service_role` key.
 3. In GitHub repository **Settings → Pages**, choose **GitHub Actions**. Push to `main` to run `.github/workflows/pages.yml`. Only the six website files are included in the published artifact.
 4. In Supabase **Authentication → URL Configuration**, set the Site URL to the final Pages URL, including its repository path and trailing slash. Add that exact URL to allowed redirect URLs. Invite/password-reset emails return here.
@@ -64,3 +64,14 @@ The interface consists of portable HTML/CSS/JavaScript and can be hosted on ngin
 No attachments, automated email/WhatsApp notifications, inventory balances, scheduled SLA escalations, real-time subscriptions or in-app user administration are included. Selecting WhatsApp records a communication event; it does not send a message. Material quantities are usage records, not stock deductions. The material catalogue and operational dropdowns are versioned in `lists.js`. Font files are loaded from Google Fonts, with local sans-serif fallbacks.
 
 The JSON/data API is designed for an initial small team; the current UI loads the visible company queue at sign-in. Add server-side pagination and date-bounded reporting before the queue grows large. Sessions live in the current tab's session storage and tokens are refreshed when needed. Use normal sign-out on shared devices.
+
+
+## Continuity from an existing workbook
+
+Imported records keep the exact original ticket number. The protected `legacy_source` column retains original ticket fields, technical-activity fields, source sheet/row, import timestamp and source fingerprint. The ticket detail shows original service-request number, contact information, invoice, internal notes and data-quality issues, with the full original fields available in a disclosure. JSON exports include this provenance. The original workbook is not modified.
+
+A missing or invalid original creation date stays null; it is not replaced with the import date. A valid original SLA target supplies the initial due / follow-up calendar date and its exact original timestamp remains in provenance. Missing source due dates can stay blank on existing imported records. New tickets still require a valid date. The contact channel is `Not recorded` if the workbook did not capture it. Only submitted registers are imported; unsaved intake/manager form values are not operational history.
+
+An imported historical assignee stays attached even before that person has an account. Managers can continue editing the record without silently losing this assignment. Reassignments still require active staff, and an imported name does not grant authentication or broader access. Add an invited staff account with the matching unique display name to enable that technician's access. The team workload view includes historical assignees explicitly labelled as awaiting an account.
+
+Private import SQL and customer extracts must never be committed to this public repository. Migration inserts should use deterministic identity, duplicate-number protection, a transaction and a post-import reconciliation. Existing live tickets must never be overwritten by a workbook re-import. `database/verify_legacy.sql` exercises continuity cases with rollback-only fictional fixtures. Legacy source metadata remains outside the writeable payload of `save_ticket`.

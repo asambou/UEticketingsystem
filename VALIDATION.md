@@ -7,3 +7,7 @@ Browser demo checks passed: create and assign a ticket; reload and retain the ti
 The shared project URL and publishable key were verified. New public signups are disabled, anonymous sign-in remains disabled, and the authentication Site URL and exact redirect URL point to the GitHub Pages site.
 
 Staff invitation delivery and the first recipient's password setup require the recipient. No passwords were generated, handled or stored by the builder. Additional staff provisioning and end-user acceptance should follow before operational rollout. Automated messaging, attachments, stock control and formal SLA automation are outside this release.
+
+## Legacy continuity update
+
+Applied the incremental legacy-provenance migration and passed the existing permission suite plus `database/verify_legacy.sql`. The new tests verify that a manager can continue an imported ticket with an unknown original date and an unprovisioned historical assignee, while new invalid assignments, date-free new tickets, and attempted provenance changes remain rejected. All test fixtures roll back. A fictional browser fixture verified the original-source panel, original assignee selection, unknown-date display, adding a new work note, and saving a priority change while retaining source fields. Private workbook extracts and customer import statements are excluded from repository source.
