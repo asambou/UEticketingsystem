@@ -1,7 +1,7 @@
 // Privileged mail delivery stays on the server. Every request is authenticated
 // against Supabase Auth and requires current, active Energy admin membership.
 const origin='https://asambou.github.io';
-const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS','Content-Type':'application/json','Vary':'Origin'};
+const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS','Content-Type':'application/json','Vary':'Origin','Cache-Control':'no-store'};
 Deno.serve(async(req:Request)=>{
  const reply=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
@@ -20,6 +20,23 @@ Deno.serve(async(req:Request)=>{
   const members=check.ok?await check.json():[];
   if(!members.some((m:{role:string,active:boolean})=>m.active&&m.role==='admin'))return reply(403,{message:'Only approved Energy administrators can invite members'});
   const body=await req.json();
+  if(body.action==='recovery_link'){
+   if(typeof body.member_id!=='string'||!/^[0-9a-f-]{36}$/i.test(body.member_id))return reply(400,{message:'Select an approved member'});
+   const listResponse=await fetch(url+'/rest/v1/rpc/list_energy_members',{method:'POST',headers:{apikey:pubKey,Authorization:authorization,'Content-Type':'application/json'},body:'{}'});
+   if(!listResponse.ok)return reply(403,{message:'Administrator access required'});
+   const listed=await listResponse.json();
+   const target=listed.find((m:{id:string,active:boolean})=>m.id===body.member_id&&m.active);
+   if(!target)return reply(403,{message:'Password setup is only available for existing active approved members.'});
+   const generated=await fetch(url+'/auth/v1/admin/generate_link',{method:'POST',headers:{apikey:serviceKey,...(serviceKey.startsWith('sb_secret_')?{}:{Authorization:'Bearer '+serviceKey}),'Content-Type':'application/json'},body:JSON.stringify({type:'recovery',email:target.email,redirect_to:origin+'/UEticketingsystem/'})});
+   const result=await generated.json();
+   if(!generated.ok||!result.action_link)return reply(400,{message:'Could not generate a setup link. Ask the system administrator to review Auth settings.'});
+   // Recheck the caller and target before returning the sensitive link.
+   const recheck=await fetch(url+'/rest/v1/rpc/list_energy_members',{method:'POST',headers:{apikey:pubKey,Authorization:authorization,'Content-Type':'application/json'},body:'{}'});
+   if(!recheck.ok)return reply(403,{message:'Administrator access is no longer active'});
+   const current=await recheck.json();
+   if(!current.some((m:{id:string,active:boolean})=>m.id===target.id&&m.active))return reply(403,{message:'This member is no longer active'});
+   return reply(200,{action_link:result.action_link,email:target.email,message:'No email sent. Share this private password-setup link directly with the named colleague.'});
+  }
   const {email,name,role}=body;
   if(typeof email!=='string'||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||typeof name!=='string'||!name.trim()||name.length>120||!['admin','manager','dispatcher','technician'].includes(role))return reply(400,{message:'A valid staff email, name and role are required'});
   const cleanEmail=email.trim().toLowerCase();
