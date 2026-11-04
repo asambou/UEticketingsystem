@@ -20,6 +20,17 @@ Deno.serve(async(req:Request)=>{
   const members=check.ok?await check.json():[];
   if(!members.some((m:{role:string,active:boolean})=>m.active&&m.role==='admin'))return reply(403,{message:'Only approved Energy administrators can invite members'});
   const body=await req.json();
+  if(body.action==='set_member_password'){
+   if(typeof body.member_id!=='string'||typeof body.password!=='string'||body.password.length<16||body.password.length>128)return reply(400,{message:'Select an approved member and use a password of 16–128 characters.'});
+   const listResponse=await fetch(url+'/rest/v1/rpc/list_energy_members',{method:'POST',headers:{apikey:pubKey,Authorization:authorization,'Content-Type':'application/json'},body:'{}'});
+   if(!listResponse.ok)return reply(403,{message:'Administrator access required'});
+   const listed=await listResponse.json();
+   const target=listed.find((m:{id:string,active:boolean})=>m.id===body.member_id&&m.active);
+   if(!target)return reply(403,{message:'Only an existing active approved account can receive a password.'});
+   const updated=await fetch(url+'/auth/v1/admin/users/'+encodeURIComponent(target.id),{method:'PUT',headers:{apikey:serviceKey,...(serviceKey.startsWith('sb_secret_')?{}:{Authorization:'Bearer '+serviceKey}),'Content-Type':'application/json'},body:JSON.stringify({password:body.password,email_confirm:true})});
+   if(!updated.ok)return reply(400,{message:'Password could not be saved. It may not meet the authentication password policy.'});
+   return reply(200,{message:'Password saved for '+target.email+'. Share it privately with this colleague. No email sent.'});
+  }
   if(body.action==='recovery_link'){
    if(typeof body.member_id!=='string'||!/^[0-9a-f-]{36}$/i.test(body.member_id))return reply(400,{message:'Select an approved member'});
    const listResponse=await fetch(url+'/rest/v1/rpc/list_energy_members',{method:'POST',headers:{apikey:pubKey,Authorization:authorization,'Content-Type':'application/json'},body:'{}'});
